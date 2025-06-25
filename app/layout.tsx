@@ -1,4 +1,3 @@
-// ❌ Jangan pakai useRouter, usePathname di sini
 import './globals.css';
 import { AuthProvider } from './context/auth_context';
 import LayoutClient from '../components/layout_clients'; // pisahkan ke komponen client

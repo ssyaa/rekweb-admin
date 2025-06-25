@@ -1,5 +1,3 @@
-// utils/api.ts
-
 export interface Submission {
   id: string;
   thesis_title: string;
@@ -17,10 +15,9 @@ export interface Submission {
 }
 
 // Fungsi untuk fetch semua Submission
-// Fungsi untuk fetch semua Submission
 export const fetch_submission = async (): Promise<Submission[]> => {
   const res = await fetch('http://localhost:3002/submission', {
-    credentials: 'include', // ⬅️ agar cookie token dikirim
+    credentials: 'include', // untuk roles
   });
   if (!res.ok) {
     throw new Error('Gagal mengambil data Submission');
@@ -34,7 +31,7 @@ export async function submission_approve(id: string, file_url?: string) {
   return await fetch(`http://localhost:3002/submission/${id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', // ⬅️ penting untuk role-based guard
+    credentials: 'include', // // untuk roles
     body: JSON.stringify({ status: 'DISETUJUI', file_url }),
   });
 }
@@ -44,7 +41,7 @@ export async function submission_rejected(id: string, reason: string) {
   return await fetch(`http://localhost:3002/submission/${id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', // ⬅️ ini juga
+    credentials: 'include', // untuk roles
     body: JSON.stringify({ status: 'DITOLAK', reason_rejected: reason }),
   });
 }

@@ -27,14 +27,14 @@ interface Pengajuan {
 
 export default function Manajemen() {
   const [pengajuan, setSubmission] = useState<Pengajuan[]>([]);
-  const [filterStatus, setFilterStatus] = useState<string>('semua');
-  const [selectedSubmission, setSelectedSubmission] = useState<Pengajuan | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string>('semua'); // Untuk filter status pengajuan
+  const [selectedSubmission, setSelectedSubmission] = useState<Pengajuan | null>(null); // Untuk dialog detail
   const [rejectModal, setRejectModal] = useState<{ visible: boolean; item: Pengajuan | null }>({ visible: false, item: null });
-  const [rejectReason, setRejectReason] = useState<string>('');
+  const [rejectReason, setRejectReason] = useState<string>(''); // Alasan penolakan
 
   const loadPengajuan = async () => {
     try {
-      const data = await fetch_submission();
+      const data = await fetch_submission(); // Ambil data pengajuan dari API
       setSubmission(data);
     } catch (error) {
       console.error(error);
@@ -43,7 +43,7 @@ export default function Manajemen() {
 
   const handleApprove = async (item: Pengajuan) => {
     try {
-      await submission_approve(item.id, item.file_url);
+      await submission_approve(item.id, item.file_url); // Setujui pengajuan
       loadPengajuan();
     } catch (error) {
       console.error(error);
@@ -53,7 +53,7 @@ export default function Manajemen() {
   const handleReject = async () => {
     if (rejectReason && rejectModal.item) {
       try {
-        await submission_rejected(rejectModal.item.id, rejectReason);
+        await submission_rejected(rejectModal.item.id, rejectReason); // Tolak pengajuan dengan alasan
         loadPengajuan();
         setRejectModal({ visible: false, item: null });
         setRejectReason('');
@@ -64,7 +64,7 @@ export default function Manajemen() {
   };
 
   useEffect(() => {
-    loadPengajuan();
+    loadPengajuan(); // Load data saat halaman pertama kali muncul
   }, []);
 
   const columns: MRT_ColumnDef<Pengajuan>[] = [
@@ -102,6 +102,7 @@ export default function Manajemen() {
               padding: '0.2rem 1rem',
             }}
           >
+            {/* Ikon status */}
             {status === 'DISETUJUI' && <CheckCircleIcon />}
             {status === 'DITOLAK' && <CancelIcon />}
             {status === 'MENUNGGU' && <HourglassEmptyIcon />}
@@ -122,7 +123,7 @@ export default function Manajemen() {
           <Button
             variant="contained"
             color="primary"
-            onClick={() => setSelectedSubmission(row.original)}
+            onClick={() => setSelectedSubmission(row.original)} // Buka dialog detail
           >
             Detail
           </Button>
@@ -131,14 +132,14 @@ export default function Manajemen() {
               <Button
                 variant="contained"
                 color="success"
-                onClick={() => handleApprove(row.original)}
+                onClick={() => handleApprove(row.original)} // Setujui
               >
                 Setujui
               </Button>
               <Button
                 variant="contained"
                 color="error"
-                onClick={() => setRejectModal({ visible: true, item: row.original })}
+                onClick={() => setRejectModal({ visible: true, item: row.original })} // Buka dialog tolak
               >
                 Tolak
               </Button>
@@ -169,7 +170,7 @@ export default function Manajemen() {
         )}
       />
 
-      {/* Dialog untuk detail */}
+      {/* Dialog Detail Pengajuan */}
       {selectedSubmission && (
         <Dialog open={!!selectedSubmission} onClose={() => setSelectedSubmission(null)}>
           <DialogTitle>Detail Pengajuan</DialogTitle>
@@ -208,7 +209,7 @@ export default function Manajemen() {
         </Dialog>
       )}
 
-      {/* Dialog untuk alasan penolakan */}
+      {/* Dialog Tolak Pengajuan */}
       {rejectModal.visible && (
         <Dialog open={rejectModal.visible} onClose={() => setRejectModal({ visible: false, item: null })}>
           <DialogTitle>Alasan Penolakan</DialogTitle>

@@ -27,13 +27,13 @@ const ExaminerForm = () => {
     const { user, loading: authLoading, checkAuth } = useAuth();
 
     useEffect(() => {
-        checkAuth();
+        checkAuth(); //session diperiksa saat halaman dimuat
     }, []);
 
-    // Proteksi halaman untuk selain ADMIN
+    // Proteksi: hanya ADMIN yang boleh akses
     useEffect(() => {
         if (!authLoading && user && user.role !== 'ADMIN') {
-            router.replace('/unauthorized'); // arahkan ke halaman unauthorized
+            router.replace('/unauthorized'); // redirect jika bukan admin
         }
     }, [authLoading, user]);
 
@@ -42,6 +42,7 @@ const ExaminerForm = () => {
         setError('');
         setLoading(true);
 
+        // Validasi sederhana input kosong
         if (!name || !email) {
             setError('Nama dan email harus diisi.');
             setLoading(false);
@@ -63,7 +64,7 @@ const ExaminerForm = () => {
                 throw new Error(err.message || 'Gagal menambahkan examiner');
             }
 
-            setDialogOpen(true);
+            setDialogOpen(true); // Tampilkan konfirmasi sukses
         } catch (err: any) {
             console.error('Gagal tambah:', err);
             setError(err.message || 'Terjadi kesalahan saat menambahkan.');
@@ -72,7 +73,7 @@ const ExaminerForm = () => {
         }
     };
 
-    // Tampilkan loading global jika auth masih loading
+    // Tampilkan loading jika auth masih berjalan
     if (authLoading) {
         return (
             <Box sx={{ p: 4 }}>
@@ -81,7 +82,7 @@ const ExaminerForm = () => {
         );
     }
 
-    // Tambahan fallback untuk user yang belum login (misalnya nge-bypass langsung URL)
+    // Jika user tidak login dan bypass URL langsung
     if (!user) {
         return (
             <Box sx={{ p: 4 }}>
@@ -143,7 +144,7 @@ const ExaminerForm = () => {
                         <Button
                             onClick={() => {
                                 setDialogOpen(false);
-                                router.push('/jadwal');
+                                router.push('/jadwal'); // Arahkan ke halaman jadwal
                             }}
                             variant="outlined"
                             color="primary"

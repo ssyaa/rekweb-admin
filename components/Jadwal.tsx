@@ -42,12 +42,12 @@ const JadwalSidang = () => {
   const fetchData = async () => {
     try {
       const response = await fetch('http://localhost:3002/submission', {
-        credentials: 'include', // ⬅️ agar token JWT dari cookie dikirim
+        credentials: 'include', // kirim cookie (JWT) untuk autentikasi
       });
       if (!response.ok) throw new Error('Gagal mengambil data');
       const data: Jadwal[] = await response.json();
 
-      const filteredData = data.filter((item) => item.status === 'DISETUJUI');
+      const filteredData = data.filter((item) => item.status === 'DISETUJUI'); // hanya tampilkan data yang disetujui
       setJadwal(filteredData);
     } catch (error) {
       console.error(error);
@@ -55,25 +55,25 @@ const JadwalSidang = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(); // ambil data saat pertama kali render
   }, []);
 
   const handleAdd = () => {
-    router.push('/jadwal/tambah'); // ⬅️ perbaikan path
+    router.push('/jadwal/tambah'); // navigasi ke form tambah jadwal
   };
 
   const handleEdit = (id: string) => {
-    router.push(`/jadwal/${id}`); // ⬅️ perbaikan path
+    router.push(`/jadwal/${id}`); // navigasi ke halaman edit
   };
 
   const handleDelete = async (id: string) => {
     try {
       const response = await fetch(`http://localhost:3002/submission/${id}`, {
         method: 'DELETE',
-        credentials: 'include', // penting untuk guard backend
+        credentials: 'include', // penting untuk otorisasi penghapusan
       });
       if (!response.ok) throw new Error('Gagal menghapus');
-      setJadwal((prev) => prev.filter((item) => item.id !== id));
+      setJadwal((prev) => prev.filter((item) => item.id !== id)); // update tampilan setelah hapus
     } catch (error) {
       console.error(error);
     }
@@ -153,6 +153,7 @@ const JadwalSidang = () => {
       csvRows.push(row.join(','));
     });
 
+    // buat blob dan trigger download file .csv
     const csvString = csvRows.join('\n');
     const blob = new Blob([csvString], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -168,7 +169,7 @@ const JadwalSidang = () => {
     doc.setFontSize(18);
     doc.text('Jadwal Sidang', 14, 20);
     doc.setFontSize(12);
-    doc.text(`Tanggal: ${new Date().toLocaleDateString()}`, 14, 30); // ⬅️ perbaikan template string
+    doc.text(`Tanggal: ${new Date().toLocaleDateString()}`, 14, 30);
 
     const header = [
       [
@@ -201,6 +202,7 @@ const JadwalSidang = () => {
       6: { cellWidth: 50 },
     };
 
+    // hitung margin tengah agar tabel berada di tengah halaman
     const totalWidth = Object.values(columnStyles).reduce(
       (acc, style) => acc + style.cellWidth,
       0,
@@ -229,6 +231,7 @@ const JadwalSidang = () => {
       margin: { top: 40, left: marginLeft },
     });
 
+    // buat preview PDF sebelum download
     const pdfBlob = doc.output('blob');
     const pdfUrl = URL.createObjectURL(pdfBlob);
     setPdfData(pdfUrl);
@@ -241,7 +244,7 @@ const JadwalSidang = () => {
       link.href = pdfData;
       link.download = 'jadwal_sidang.pdf';
       link.click();
-      setIsModalOpen(false);
+      setIsModalOpen(false); // tutup dialog setelah unduh
     }
   };
 
