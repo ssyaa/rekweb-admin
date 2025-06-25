@@ -2,95 +2,112 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getAuth } from 'firebase/auth';
-import { db } from '../lib/firebaseConfig';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Typography,
+} from '@mui/material';
 import { MaterialReactTable, MRT_ColumnDef } from 'material-react-table';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+interface Jadwal {
+  id: string;
+  student: {
+    name: string;
+    nim: string;
+  };
+  thesis_title: string;
+  date: string;
+  time: string;
+  examiner_1: {
+    name: string;
+  };
+  examiner_2: {
+    name: string;
+  };
+  status: 'DISETUJUI' | 'DITOLAK' | 'MENUNGGU';
+}
+
 const JadwalSidang = () => {
-  const [jadwal, setJadwal] = useState<any[]>([]);
+  const [jadwal, setJadwal] = useState<Jadwal[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [pdfData, setPdfData] = useState<string | null>(null);
-
   const router = useRouter();
 
-  // Fetch data from Firebase
+  const fetchData = async () => {
+    try {
+      const response = await fetch('http://localhost:3002/submission', {
+        credentials: 'include', // ⬅️ agar token JWT dari cookie dikirim
+      });
+      if (!response.ok) throw new Error('Gagal mengambil data');
+      const data: Jadwal[] = await response.json();
+
+      const filteredData = data.filter((item) => item.status === 'DISETUJUI');
+      setJadwal(filteredData);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      const auth = getAuth();
-      const user = auth.currentUser;
-
-      if (user) {
-        try {
-          const jadwalSnapshot = await getDocs(collection(db, 'jadwal_sidang'));
-          const jadwalData = jadwalSnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-          setJadwal(jadwalData);
-        } catch (error) {
-          console.error('Error fetching data:', error);
-        }
-      }
-    };
-
     fetchData();
   }, []);
 
-  const handleAdd = async () => {
-    router.push(`/jadwal/tambah`);
+  const handleAdd = () => {
+    router.push('/jadwal/tambah'); // ⬅️ perbaikan path
   };
 
   const handleEdit = (id: string) => {
-    router.push(`/jadwal/${id}`);
+    router.push(`/jadwal/${id}`); // ⬅️ perbaikan path
   };
 
   const handleDelete = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'jadwal_sidang', id));
+      const response = await fetch(`http://localhost:3002/submission/${id}`, {
+        method: 'DELETE',
+        credentials: 'include', // penting untuk guard backend
+      });
+      if (!response.ok) throw new Error('Gagal menghapus');
       setJadwal((prev) => prev.filter((item) => item.id !== id));
     } catch (error) {
-      console.error('Error deleting jadwal:', error);
+      console.error(error);
     }
   };
 
-  const columns: MRT_ColumnDef<any>[] = [
+  const columns: MRT_ColumnDef<Jadwal>[] = [
     {
-      accessorKey: 'nama',
+      accessorFn: (row) => row.student.name,
+      id: 'name',
       header: 'Nama',
     },
     {
-      accessorKey: 'nim',
+      accessorFn: (row) => row.student.nim,
+      id: 'nim',
       header: 'NIM',
     },
+    { accessorKey: 'thesis_title', header: 'Judul Skripsi' },
+    { accessorKey: 'date', header: 'Tanggal Sidang' },
+    { accessorKey: 'time', header: 'Waktu Sidang' },
     {
-      accessorKey: 'judul_skripsi',
-      header: 'Judul Skripsi',
-    },
-    {
-      accessorKey: 'tanggal_sidang',
-      header: 'Tanggal Sidang',
-    },
-    {
-      accessorKey: 'waktu_sidang',
-      header: 'Waktu Sidang',
-    },
-    {
-      accessorKey: 'dosen_1',
+      accessorFn: (row) => row.examiner_1?.name || '-',
+      id: 'examiner_1',
       header: 'Dosen 1',
     },
     {
-      accessorKey: 'dosen_2',
+      accessorFn: (row) => row.examiner_2?.name || '-',
+      id: 'examiner_2',
       header: 'Dosen 2',
     },
     {
       id: 'actions',
       header: 'Aksi',
       Cell: ({ row }) => (
-        <Box sx={{ display: 'flex', gap: '0.5rem', alignItems: 'center', }}>
+        <Box sx={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <Button
             variant="contained"
             color="primary"
@@ -112,18 +129,26 @@ const JadwalSidang = () => {
 
   const downloadCSV = () => {
     const csvRows = [];
-    const headers = ['Nama', 'NIM', 'Judul Skripsi', 'Tanggal Sidang', 'Waktu Sidang', 'Dosen 1', 'Dosen 2'];
+    const headers = [
+      'Nama',
+      'NIM',
+      'Judul Skripsi',
+      'Tanggal Sidang',
+      'Waktu Sidang',
+      'Dosen 1',
+      'Dosen 2',
+    ];
     csvRows.push(headers.join(','));
 
-    jadwal.forEach(item => {
+    jadwal.forEach((item) => {
       const row = [
-        item.nama,
-        item.nim,
-        item.judul_skripsi,
-        item.tanggal_sidang,
-        item.waktu_sidang,
-        item.dosen_1,
-        item.dosen_2
+        item.student.name,
+        item.student.nim,
+        item.thesis_title,
+        item.date,
+        item.time,
+        item.examiner_1?.name || '-',
+        item.examiner_2?.name || '-',
       ];
       csvRows.push(row.join(','));
     });
@@ -143,17 +168,27 @@ const JadwalSidang = () => {
     doc.setFontSize(18);
     doc.text('Jadwal Sidang', 14, 20);
     doc.setFontSize(12);
-    doc.text(`Tanggal: ${new Date().toLocaleDateString()}`, 14, 30);
+    doc.text(`Tanggal: ${new Date().toLocaleDateString()}`, 14, 30); // ⬅️ perbaikan template string
 
-    const header = [['Nama', 'NIM', 'Judul Skripsi', 'Tanggal Sidang', 'Waktu Sidang', 'Dosen 1', 'Dosen 2']];
-    const data = jadwal.map(item => [
-      item.nama,
-      item.nim,
-      item.judul_skripsi,
-      item.tanggal_sidang,
-      item.waktu_sidang,
-      item.dosen_1,
-      item.dosen_2
+    const header = [
+      [
+        'Nama',
+        'NIM',
+        'Judul Skripsi',
+        'Tanggal Sidang',
+        'Waktu Sidang',
+        'Dosen 1',
+        'Dosen 2',
+      ],
+    ];
+    const data = jadwal.map((item) => [
+      item.student.name,
+      item.student.nim,
+      item.thesis_title,
+      item.date,
+      item.time,
+      item.examiner_1?.name || '-',
+      item.examiner_2?.name || '-',
     ]);
 
     const columnStyles = {
@@ -166,7 +201,10 @@ const JadwalSidang = () => {
       6: { cellWidth: 50 },
     };
 
-    const totalWidth = Object.values(columnStyles).reduce((acc, style) => acc + style.cellWidth, 0);
+    const totalWidth = Object.values(columnStyles).reduce(
+      (acc, style) => acc + style.cellWidth,
+      0,
+    );
     const pageWidth = doc.internal.pageSize.getWidth();
     const marginLeft = (pageWidth - totalWidth) / 2;
 
@@ -187,7 +225,7 @@ const JadwalSidang = () => {
         valign: 'middle',
         overflow: 'linebreak',
       },
-      columnStyles: columnStyles,
+      columnStyles,
       margin: { top: 40, left: marginLeft },
     });
 
@@ -198,31 +236,53 @@ const JadwalSidang = () => {
   };
 
   const handleDownload = () => {
-    const link = document.createElement('a');
-    link.href = pdfData || '';
-    link.download = 'jadwal_sidang.pdf';
-    link.click();
-    setIsModalOpen(false); 
+    if (pdfData) {
+      const link = document.createElement('a');
+      link.href = pdfData;
+      link.download = 'jadwal_sidang.pdf';
+      link.click();
+      setIsModalOpen(false);
+    }
   };
 
   return (
-    <Box sx={{
-      mt: 2,
-      p: 3, 
-      marginX: 'auto', 
-      flexWrap: 'wrap',
-      backgroundColor: 'white', 
-      borderRadius: '8px', // Membuat sudut lebih lembut
-      boxShadow: 3, // Memberikan bayangan ringan pada kotak
-      maxWidth: '1350px',  // Maksimal lebar kotak agar tidak melebihi 1200px
-      width: '100%',       // Lebar 100% agar responsif
-    }}>
-      <Typography variant="h4" className="text-black">Data Jadwal Sidang</Typography>
-      <Box sx={{ marginTop: '1rem', marginBottom: '2rem', display: 'flex' }}>
-        <Button variant="contained" color="primary" onClick={handleAdd} sx={{ mr: 6 }}>
+    <Box
+      sx={{
+        mt: 2,
+        p: 3,
+        marginX: 'auto',
+        flexWrap: 'wrap',
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        boxShadow: 3,
+        maxWidth: '1350px',
+        width: '100%',
+      }}
+    >
+      <Typography variant="h4" className="text-black">
+        Data Jadwal Sidang
+      </Typography>
+      <Box
+        sx={{
+          marginTop: '1rem',
+          marginBottom: '2rem',
+          display: 'flex',
+        }}
+      >
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleAdd}
+          sx={{ mr: 6 }}
+        >
           Tambah Jadwal
         </Button>
-        <Button variant="contained" color="warning" onClick={downloadCSV} sx={{ mr: 2 }}>
+        <Button
+          variant="contained"
+          color="warning"
+          onClick={downloadCSV}
+          sx={{ mr: 2 }}
+        >
           Unduh CSV
         </Button>
         <Button variant="contained" color="success" onClick={downloadPDF}>
@@ -244,8 +304,12 @@ const JadwalSidang = () => {
           <Typography>Apakah Anda ingin mengunduh PDF?</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setIsModalOpen(false)} color="primary">Batal</Button>
-          <Button onClick={handleDownload} color="primary">Unduh</Button>
+          <Button onClick={() => setIsModalOpen(false)} color="primary">
+            Batal
+          </Button>
+          <Button onClick={handleDownload} color="primary">
+            Unduh
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

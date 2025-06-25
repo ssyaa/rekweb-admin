@@ -1,166 +1,193 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, addDoc, getDocs } from 'firebase/firestore';
-import { db } from '../../../lib/firebaseConfig';
 
 const TambahJadwal = () => {
-  const [newJadwal, setNewJadwal] = useState({
-    nama: '',
-    nim: '',
-    judul_skripsi: '',
-    tanggal_sidang: '',
-    waktu_sidang: '',
-    dosen_1: '',
-    dosen_2: '',
-  });
-  const [pengajuan, setPengajuan] = useState<any[]>([]);
-  const [dosen, setDosen] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Fetch data pengajuan dan dosen saat halaman diakses
-  useState(() => {
-    const fetchData = async () => {
-      try {
-        const pengajuanSnapshot = await getDocs(collection(db, 'pengajuan_sidang'));
-        const pengajuanData = pengajuanSnapshot.docs
-          .map((doc) => doc.data())
-          .filter((item) => item.status === 'disetujui');
-        setPengajuan(pengajuanData);
-
-        const dosenSnapshot = await getDocs(collection(db, 'dosen'));
-        const dosenData = dosenSnapshot.docs.map((doc) => doc.data().nama);
-        setDosen(dosenData);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      }
-    };
-    fetchData();
+  const [form, setForm] = useState({
+    id: '', // submission id
+    name: '',
+    nim: '',
+    thesis_title: '',
+    date: '',
+    time: '',
+    examiner_1_id: '',
+    examiner_2_id: '',
   });
 
-  const handleAdd = async () => {
-    try {
-        if (
-            !newJadwal.nama ||
-            !newJadwal.nim ||
-            !newJadwal.judul_skripsi ||
-            !newJadwal.tanggal_sidang ||
-            !newJadwal.waktu_sidang ||
-            !newJadwal.dosen_1 ||
-            !newJadwal.dosen_2
-          ) {
-            setError('Semua kolom wajib diisi!');
-            return;
-          }
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [examiners, setExaminers] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-        await addDoc(collection(db, 'jadwal_sidang'), newJadwal);
-        router.push('/jadwal'); // Redirect ke halaman utama jadwal
-        } catch (error) {
-          console.error('Error adding new jadwal:', error);
-        }
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await fetch('http://localhost:3002/auth/me', {
+          credentials: 'include',
+        });
+        if (!res.ok) throw new Error('Not authenticated');
+
+        const [res1, res2] = await Promise.all([
+          fetch('http://localhost:3002/submission', { credentials: 'include' }),
+          fetch('http://localhost:3002/examiner', { credentials: 'include' }),
+        ]);
+
+        const [data1, data2] = await Promise.all([res1.json(), res2.json()]);
+
+        const approved = data1.filter((item: any) => item.status === 'DISETUJUI');
+        setSubmissions(approved);
+        setExaminers(data2);
+      } catch (err) {
+        console.error('Failed to load:', err);
+        router.push('/login'); // Redirect jika tidak ada token / gagal auth
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [router]);
+
+  const handleAdd = async () => {
+    if (!form.id || !form.date || !form.time || !form.examiner_1_id || !form.examiner_2_id) {
+      setError('All fields are required!');
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:3002/submission/${form.id}/schedule`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          date: form.date,
+          time: form.time,
+          examiner_1_id: form.examiner_1_id,
+          examiner_2_id: form.examiner_2_id,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to update schedule');
+
+      router.push('/jadwal');
+    } catch (err) {
+      console.error(err);
+      setError('Failed to save schedule');
+    }
   };
 
-  const handleSelectMahasiswa = (nama: string) => {
-    const selected = pengajuan.find((item) => item.nama === nama);
+  const handleSelectSubmission = (id: string) => {
+    const selected = submissions.find((item) => item.id === id);
     if (selected) {
-      setNewJadwal({
-        ...newJadwal,
-        nama: selected.nama,
-        nim: selected.nim,
-        judul_skripsi: selected.judul_skripsi,
+      setForm({
+        ...form,
+        id: selected.id,
+        name: selected.student.name,
+        nim: selected.student.nim,
+        thesis_title: selected.thesis_title,
       });
     }
   };
 
+  if (loading) return <p className="p-6 text-gray-700">Loading...</p>;
+
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-800 mb-4">Tambah Jadwal Baru</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-4">Add Thesis Schedule</h1>
       {error && <p className="text-red-600 mb-4">{error}</p>}
+
       <div className="mb-4">
-        <label className="block font-medium text-gray-800 mb-1">Nama Mahasiswa:</label>
+        <label className="block mb-1 font-medium">Student Name:</label>
         <select
-          className="border border-gray-300 p-2 rounded w-full text-gray-800"
-          onChange={(e) => handleSelectMahasiswa(e.target.value)}
-          value={newJadwal.nama}
+          className="w-full border border-gray-300 rounded p-2"
+          onChange={(e) => handleSelectSubmission(e.target.value)}
+          value={form.id}
         >
-          <option value="">Pilih Mahasiswa</option>
-          {pengajuan.map((item) => (
-            <option key={item.nim} value={item.nama}>
-              {item.nama}
+          <option value="">Select Student</option>
+          {submissions.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.student.name}
             </option>
           ))}
         </select>
       </div>
+
       <div className="mb-4">
-        <label className="block font-medium text-gray-800 mb-1">Judul Skripsi:</label>
+        <label className="block mb-1 font-medium">Thesis Title:</label>
         <input
           type="text"
-          className="border border-gray-300 p-2 rounded w-full text-gray-800"
-          value={newJadwal.judul_skripsi}
+          className="w-full border border-gray-300 rounded p-2"
+          value={form.thesis_title}
           disabled
         />
       </div>
+
       <div className="mb-4">
-        <label className="block font-medium text-gray-800 mb-1">Tanggal Sidang:</label>
+        <label className="block mb-1 font-medium">Date:</label>
         <input
           type="date"
-          className="border border-gray-300 p-2 rounded w-full text-gray-800"
-          value={newJadwal.tanggal_sidang}
-          onChange={(e) => setNewJadwal({ ...newJadwal, tanggal_sidang: e.target.value })}
+          className="w-full border border-gray-300 rounded p-2"
+          value={form.date}
+          onChange={(e) => setForm({ ...form, date: e.target.value })}
         />
       </div>
+
       <div className="mb-4">
-        <label className="block font-medium text-gray-800 mb-1">Waktu Sidang:</label>
+        <label className="block mb-1 font-medium">Time:</label>
         <input
           type="time"
-          className="border border-gray-300 p-2 rounded w-full text-gray-800"
-          value={newJadwal.waktu_sidang}
-          onChange={(e) => setNewJadwal({ ...newJadwal, waktu_sidang: e.target.value })}
+          className="w-full border border-gray-300 rounded p-2"
+          value={form.time}
+          onChange={(e) => setForm({ ...form, time: e.target.value })}
         />
       </div>
+
       <div className="mb-4">
-        <label className="block font-medium text-gray-800 mb-1">Dosen 1:</label>
+        <label className="block mb-1 font-medium">Examiner 1:</label>
         <select
-          className="border border-gray-300 p-2 rounded w-full text-gray-800"
-          value={newJadwal.dosen_1}
-          onChange={(e) => setNewJadwal({ ...newJadwal, dosen_1: e.target.value })}
+          className="w-full border border-gray-300 rounded p-2"
+          value={form.examiner_1_id}
+          onChange={(e) => setForm({ ...form, examiner_1_id: e.target.value })}
         >
-          <option value="">Pilih Dosen</option>
-          {dosen.map((nama, index) => (
-            <option key={index} value={nama}>
-              {nama}
+          <option value="">Select Examiner</option>
+          {examiners.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
             </option>
           ))}
         </select>
       </div>
+
       <div className="mb-4">
-        <label className="block font-medium text-gray-800 mb-1">Dosen 2:</label>
+        <label className="block mb-1 font-medium">Examiner 2:</label>
         <select
-          className="border border-gray-300 p-2 rounded w-full text-gray-800"
-          value={newJadwal.dosen_2}
-          onChange={(e) => setNewJadwal({ ...newJadwal, dosen_2: e.target.value })}
+          className="w-full border border-gray-300 rounded p-2"
+          value={form.examiner_2_id}
+          onChange={(e) => setForm({ ...form, examiner_2_id: e.target.value })}
         >
-          <option value="">Pilih Dosen</option>
-          {dosen.map((nama, index) => (
-            <option key={index} value={nama}>
-              {nama}
+          <option value="">Select Examiner</option>
+          {examiners.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
             </option>
           ))}
         </select>
       </div>
+
       <button
         className="bg-green-600 text-white px-4 py-2 rounded mr-2"
         onClick={handleAdd}
       >
-        Tambah
+        Add Schedule
       </button>
       <button
         className="bg-red-600 text-white px-4 py-2 rounded"
         onClick={() => router.push('/jadwal')}
       >
-        Batal
+        Cancel
       </button>
     </div>
   );

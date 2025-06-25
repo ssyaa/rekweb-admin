@@ -1,126 +1,83 @@
-'use client'
+'use client';
 
 import { useState, useEffect } from 'react';
 import { MaterialReactTable, MRT_ColumnDef } from 'material-react-table';
-import { collection, getDocs, doc, setDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebaseConfig';
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 
+import { fetch_submission, submission_approve, submission_rejected } from '../app/utils/api';
+
 interface Pengajuan {
   id: string;
-  nama: string;
-  nim: string;
-  judul_skripsi: string;
-  status: string;
-  alasan?: string;
-  tanggal_sidang?: string;
-  waktu_sidang?: string;
-  berkas?: string;
+  thesis_title: string;
+  status: 'MENUNGGU' | 'DISETUJUI' | 'DITOLAK';
+  reason_rejected?: string;
+  file_url: string;
+  student: {
+    name: string;
+    nim: string;
+  };
+  thesis_schedule?: {
+    date: string;
+    time: string;
+  };
 }
 
 export default function Manajemen() {
-  const [pengajuan, setPengajuan] = useState<Pengajuan[]>([]);
+  const [pengajuan, setSubmission] = useState<Pengajuan[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('semua');
-  const [selectedPengajuan, setSelectedPengajuan] = useState<Pengajuan | null>(null);
+  const [selectedSubmission, setSelectedSubmission] = useState<Pengajuan | null>(null);
   const [rejectModal, setRejectModal] = useState<{ visible: boolean; item: Pengajuan | null }>({ visible: false, item: null });
   const [rejectReason, setRejectReason] = useState<string>('');
 
-  // Fetch data from Firestore
-  const fetchPengajuan = async () => {
+  const loadPengajuan = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, 'pengajuan_sidang'));
-  
-      const pengajuanData: Pengajuan[] = await Promise.all(
-        querySnapshot.docs.map(async (docSnapshot) => {
-          const data = docSnapshot.data();
-          let tanggalSidang = '';
-          let waktuSidang = '';
-  
-          // Jika status disetujui, ambil data dari jadwal_sidang menggunakan ID dari pengajuan_sidang
-          if (data.status === 'disetujui') {
-            const jadwalDoc = await getDocs(collection(db, 'jadwal_sidang'));
-            const jadwalData = jadwalDoc.docs
-              .find((jadwal) => jadwal.id === docSnapshot.id)?.data();
-            if (jadwalData) {
-              tanggalSidang = jadwalData.tanggal_sidang || '';
-              waktuSidang = jadwalData.waktu_sidang || '';
-            }
-          }
-  
-          return {
-            id: docSnapshot.id,
-            ...data,
-            tanggal_sidang: tanggalSidang,
-            waktu_sidang: waktuSidang,
-          } as Pengajuan;
-        })
-      );
-  
-      setPengajuan(pengajuanData);
+      const data = await fetch_submission();
+      setSubmission(data);
     } catch (error) {
-      console.error('Error fetching documents: ', error);
+      console.error(error);
     }
   };
-  
+
   const handleApprove = async (item: Pengajuan) => {
     try {
-      // Menggunakan ID dari pengajuan_sidang untuk dokumen jadwal_sidang
-      await setDoc(doc(db, 'jadwal_sidang', item.id), {
-        nama: item.nama,
-        nim: item.nim,
-        judul_skripsi: item.judul_skripsi,
-        status: 'disetujui',
-        tanggal_sidang: '', // Initialize empty values
-        waktu_sidang: '',
-        berkas: item.berkas || '',
-      });
-  
-      await updateDoc(doc(db, 'pengajuan_sidang', item.id), { status: 'disetujui' });
-  
-      // Refresh data
-      fetchPengajuan();
+      await submission_approve(item.id, item.file_url);
+      loadPengajuan();
     } catch (error) {
-      console.error('Error approving document: ', error);
+      console.error(error);
     }
   };
-  
 
   const handleReject = async () => {
     if (rejectReason && rejectModal.item) {
       try {
-        await updateDoc(doc(db, 'pengajuan_sidang', rejectModal.item.id), {
-          status: 'ditolak',
-          alasan: rejectReason,
-        });
-
-        // Refresh data
-        fetchPengajuan();
+        await submission_rejected(rejectModal.item.id, rejectReason);
+        loadPengajuan();
         setRejectModal({ visible: false, item: null });
         setRejectReason('');
       } catch (error) {
-        console.error('Error rejecting document: ', error);
+        console.error(error);
       }
     }
   };
 
   useEffect(() => {
-    fetchPengajuan();
+    loadPengajuan();
   }, []);
 
   const columns: MRT_ColumnDef<Pengajuan>[] = [
     {
-      accessorKey: 'nama',
-      header: 'Nama',
+      accessorFn: (row) => row.student.name,
+      header: 'name',
     },
     {
-      accessorKey: 'nim',
+      accessorFn: (row) => row.student.nim,
       header: 'NIM',
     },
     {
-      accessorKey: 'judul_skripsi',
+      accessorKey: 'thesis_title',
       header: 'Judul Skripsi',
     },
     {
@@ -135,9 +92,9 @@ export default function Manajemen() {
               alignItems: 'center',
               gap: '0.5rem',
               backgroundColor:
-                status === 'disetujui'
+                status === 'DISETUJUI'
                   ? 'green'
-                  : status === 'ditolak'
+                  : status === 'DITOLAK'
                   ? 'red'
                   : 'orange',
               color: 'white',
@@ -145,13 +102,17 @@ export default function Manajemen() {
               padding: '0.2rem 1rem',
             }}
           >
-            {status === 'disetujui' && <CheckCircleIcon />}
-            {status === 'ditolak' && <CancelIcon />}
-            {status === 'menunggu persetujuan' && <HourglassEmptyIcon />}
-            {status}
+            {status === 'DISETUJUI' && <CheckCircleIcon />}
+            {status === 'DITOLAK' && <CancelIcon />}
+            {status === 'MENUNGGU' && <HourglassEmptyIcon />}
+            {status === 'MENUNGGU'
+              ? 'Menunggu Persetujuan'
+              : status === 'DISETUJUI'
+              ? 'Disetujui'
+              : 'Ditolak'}
           </Box>
         );
-      },
+      }
     },
     {
       id: 'actions',
@@ -161,11 +122,11 @@ export default function Manajemen() {
           <Button
             variant="contained"
             color="primary"
-            onClick={() => setSelectedPengajuan(row.original)}
+            onClick={() => setSelectedSubmission(row.original)}
           >
             Detail
           </Button>
-          {row.original.status === 'menunggu persetujuan' && (
+          {row.original.status === 'MENUNGGU' && (
             <>
               <Button
                 variant="contained"
@@ -191,11 +152,11 @@ export default function Manajemen() {
   return (
     <Box
       sx={{
-        p: 3, // Padding di dalam kotak
-        backgroundColor: 'white', // Background putih
-        borderRadius: '8px', // Sudut tidak terlalu runcing
-        boxShadow: 3, // Menambahkan bayangan untuk memberi efek kedalaman
-        marginTop: '15px'
+        p: 3,
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        boxShadow: 3,
+        marginTop: '15px',
       }}
     >
       <Typography variant="h4" gutterBottom sx={{ color: 'black' }}>
@@ -209,22 +170,22 @@ export default function Manajemen() {
       />
 
       {/* Dialog untuk detail */}
-      {selectedPengajuan && (
-        <Dialog open={!!selectedPengajuan} onClose={() => setSelectedPengajuan(null)}>
+      {selectedSubmission && (
+        <Dialog open={!!selectedSubmission} onClose={() => setSelectedSubmission(null)}>
           <DialogTitle>Detail Pengajuan</DialogTitle>
           <DialogContent>
-            <Typography>Nama: {selectedPengajuan.nama}</Typography>
-            <Typography>NIM: {selectedPengajuan.nim}</Typography>
-            <Typography>Judul: {selectedPengajuan.judul_skripsi}</Typography>
-            {selectedPengajuan.status === 'disetujui' && (
+            <Typography>name: {selectedSubmission.student?.name}</Typography>
+            <Typography>NIM: {selectedSubmission.student?.nim}</Typography>
+            <Typography>Judul: {selectedSubmission.thesis_title}</Typography>
+            {selectedSubmission.status === 'DISETUJUI' && (
               <>
-                <Typography>Tanggal Sidang: {selectedPengajuan.tanggal_sidang || 'Belum ditentukan'}</Typography>
-                <Typography>Waktu Sidang: {selectedPengajuan.waktu_sidang || 'Belum ditentukan'}</Typography>
-                {selectedPengajuan.berkas ? (
+                <Typography>date Sidang: {selectedSubmission.thesis_schedule?.date || 'Belum ditentukan'}</Typography>
+                <Typography>time Sidang: {selectedSubmission.thesis_schedule?.time || 'Belum ditentukan'}</Typography>
+                {selectedSubmission.file_url ? (
                   <div className="mt-4">
                     <Typography>Berkas :</Typography>
                     <a
-                      href={selectedPengajuan.berkas}
+                      href={selectedSubmission.file_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-500 underline"
@@ -237,12 +198,12 @@ export default function Manajemen() {
                 )}
               </>
             )}
-            {selectedPengajuan.status === 'ditolak' && (
-              <Typography>Alasan: {selectedPengajuan.alasan}</Typography>
+            {selectedSubmission.status === 'DITOLAK' && (
+              <Typography>Alasan: {selectedSubmission.reason_rejected}</Typography>
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setSelectedPengajuan(null)}>Tutup</Button>
+            <Button onClick={() => setSelectedSubmission(null)}>Tutup</Button>
           </DialogActions>
         </Dialog>
       )}
